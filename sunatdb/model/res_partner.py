@@ -29,6 +29,8 @@ import requests
 import zipfile
 import StringIO
 from collections import OrderedDict
+import logging
+_logger = logging.getLogger(__name__)
 
 
 def resolve_unicode(string, i=0):
@@ -86,25 +88,27 @@ class ResPartner(models.Model):
         text = text.split('|')
         name = len(text) >= 14 and text[1] or ''
         ruc = len(text) >= 14 and text[0] or ''
-        for add in address:
+        for add in len(text) >= 14 and address or []:
             desc = text[address[add]].replace('-', '').strip() and \
                 (add in ('6', '8') and text[address[add] - 1] or add) or ''
             val = text[address[add]].replace('-', '').strip() or ''
             desc = desc.strip()
             new = ('%(desc)s %(val)s' % {'desc': desc, 'val': val}).strip()
             street = '%(street)s %(new)s' % {'street': street, 'new': new}
-            street = street.strip()
+            street = street.strip().replace('\\', '')
         return name, street, ruc
 
     @api.model
     def _download_ruc_from_sunat(self):
+        _logger.info('Starting Download of the file')
         r = requests.\
             get('http://www2.sunat.gob.pe/padron_reducido_ruc.zip',
                 stream=True)
         zfobj = zipfile.ZipFile(StringIO.StringIO(r.content))
         lines = zfobj.read('padron_reducido_ruc.txt')
+        files = open('/tmp/partner_ruc.csv', 'wb')
         for line in lines.split('\n')[1:]:
-            line = resolve_unicode(line)
+            line = resolve_unicode(line).replace('"', '').replace('\\|', '')
             name, street, ruc = self._get_info_from_file(line)
             self._cr.execute('''SELECT
                                     id
@@ -114,7 +118,13 @@ class ResPartner(models.Model):
                                     vat = %s
                                 LIMIT 1''', (ruc,))
             if not self._cr.fetchall():
-                self._cr.execute('''INSERT INTO res_partner
-                                 (notify_email, name, display_name, vat)
-                                 VALUES (%s, %s, %s, %s)''',
-                                 ('none', name, name, ruc))
+                files.write('%s|%s|%s|%s|true|none\n' %
+                            (name, name, street, ruc))
+        files.close()
+        files = open('/tmp/partner_ruc.csv', 'rb')
+        _logger.info('Loading Partners')
+        self._cr.\
+            copy_expert("""COPY res_partner(display_name, name, street,
+                                            vat, active, notify_email)
+                        FROM STDIN WITH DELIMITER '|'""", files)
+        _logger.info('Process Finished')

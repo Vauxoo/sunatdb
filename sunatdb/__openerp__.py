@@ -35,7 +35,9 @@
         "base_vat"
     ],
     "demo": [],
-    "data": [],
+    "data": [
+        'data/ir_cron.xml',
+    ],
     "test": [],
     "js": [],
     "css": [],
