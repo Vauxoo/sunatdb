@@ -57,18 +57,19 @@ class ResUsers(models.Model):
                                 'to do request')
 
     @api.multi
-    def random_token(self):
+    def random_token(self, i=0):
         """ Generates an ID to identify each one of record created
         return the strgin with record ID
         """
         self.ensure_one()
         # the token has an entropy of about 120 bits (6 bits/char * 20 chars)
         token = hashlib.sha256('%s-%s-%s' % (
-            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0),
+            datetime.now().replace(hour=i, minute=0, second=0, microsecond=0),
             self.id,
             self.login)).hexdigest()
         if self.sudo().search([('access_token', '=', token)]):
-            return self.random_token()
+            i += 1
+            return self.random_token(i)
         else:
             return token
 
