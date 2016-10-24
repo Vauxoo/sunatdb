@@ -18,7 +18,7 @@ class SunatdbController(http.Controller):
                         ('authorized', '=', True)]):
             partner_data = request.env['res.partner'].sudo().\
                 search_read(domain=[('vat', '=', rfc)],
-                            fields=['name', 'street', 'vat'],
+                            fields=['name', 'street', 'vat', 'city'],
                             limit=1)
             partner_data = partner_data and partner_data[0] or {}
             partner_data.pop('id', 'No')

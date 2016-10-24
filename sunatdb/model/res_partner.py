@@ -88,6 +88,7 @@ class ResPartner(models.Model):
         text = text.split('|')
         name = len(text) >= 14 and text[1] or ''
         ruc = len(text) >= 14 and text[0] or ''
+        ubigeo = len(text) >= 14 and text[4] or ''
         for add in len(text) >= 14 and address or []:
             desc = text[address[add]].replace('-', '').strip() and \
                 (add in ('6', '8') and text[address[add] - 1] or add) or ''
@@ -96,7 +97,7 @@ class ResPartner(models.Model):
             new = ('%(desc)s %(val)s' % {'desc': desc, 'val': val}).strip()
             street = '%(street)s %(new)s' % {'street': street, 'new': new}
             street = street.strip().replace('\\', '')
-        return name, street, ruc
+        return name, street, ruc, ubigeo
 
     @api.model
     def _download_ruc_from_sunat(self):
@@ -109,7 +110,7 @@ class ResPartner(models.Model):
         files = open('/tmp/partner_ruc.csv', 'wb')
         for line in lines.split('\n')[1:]:
             line = resolve_unicode(line).replace('"', '').replace('\\|', '')
-            name, street, ruc = self._get_info_from_file(line)
+            name, street, ruc, ubigeo = self._get_info_from_file(line)
             self._cr.execute('''SELECT
                                     id
                                 FROM
@@ -118,13 +119,13 @@ class ResPartner(models.Model):
                                     vat = %s
                                 LIMIT 1''', (ruc,))
             if not self._cr.fetchall():
-                files.write('%s|%s|%s|%s|true|none\n' %
-                            (name, name, street, ruc))
+                files.write('%s|%s|%s|%s|true|none|%s\n' %
+                            (name, name, street, ruc, ubigeo))
         files.close()
         files = open('/tmp/partner_ruc.csv', 'rb')
         _logger.info('Loading Partners')
         self._cr.\
             copy_expert("""COPY res_partner(display_name, name, street,
-                                            vat, active, notify_email)
+                                            vat, active, notify_email, city)
                         FROM STDIN WITH DELIMITER '|'""", files)
         _logger.info('Process Finished')

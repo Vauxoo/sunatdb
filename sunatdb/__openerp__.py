@@ -39,6 +39,7 @@
     "data": [
         'data/ir_cron.xml',
         'view/res_users_view.xml',
+        'view/webclient_templates.xml',
     ],
     "test": [],
     "js": [],
