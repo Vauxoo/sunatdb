@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<openerp>
+    <data>
+        <record  model="ir.ui.view" id="view_users_form_simple_modif">
+            <field name="name">res.users.sunatdb</field>
+            <field name="model">res.users</field>
+            <field name="inherit_id" ref="base.view_users_form_simple_modif"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='tz']" position="after">
+                    <field name="access_token"
+                           attrs="{'invisible': [('access_token', '!=', False),('authorized', '=', False)]}"/>
+                    <field name="authorized" invisible="1"/>
+                    <button name="generate_sunat_token"
+                        type="object"
+                        string="Generate Token"
+                        class="oe_link"
+                        attrs="{'invisible': [('access_token', '!=', False)]}"/>
+                </xpath>
+            </field>
+        </record>
+    </data>
+</openerp>

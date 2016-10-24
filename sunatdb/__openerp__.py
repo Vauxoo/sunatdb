@@ -32,11 +32,13 @@
     "website": "http://www.vauxoo.com/",
     "license": "",
     "depends": [
-        "base_vat"
+        "base_vat",
+        "auth_oauth",
     ],
     "demo": [],
     "data": [
         'data/ir_cron.xml',
+        'view/res_users_view.xml',
     ],
     "test": [],
     "js": [],
