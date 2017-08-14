@@ -1,4 +1,4 @@
-# coding: utf-8
+# -*- coding: utf-8 -*-
 ##
 #    Module Writen to OpenERP, Open Source Management Solution
 #
@@ -8,6 +8,7 @@
 ##
 #    Coded by: Edgard Pimentel (pimentelrojas@gmail.com)
 #              Luis Torres (luis_t@vauxoo.com)
+#              Mariano Fernandez (mariano@vauxoo.com)
 ##
 #
 #    This program is free software: you can redistribute it and/or modify
@@ -24,44 +25,14 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 #
-from openerp import models, api
-import requests
-import zipfile
-import StringIO
-from collections import OrderedDict
 import logging
+import urllib
+import zipfile
+from collections import OrderedDict
+
+from openerp import api, models
+
 _logger = logging.getLogger(__name__)
-
-
-def resolve_unicode(string, i=0):
-
-    if not isinstance(string, (str, unicode)) or not string:
-        return string or ''
-    nstr = ''
-    if i == 0:
-        try:
-            nstr = string.encode('utf8', 'ignore')
-            return nstr.strip()
-        except BaseException:
-            i += 1
-            return resolve_unicode(string, i)
-    elif i == 1:
-        try:
-            nstr = string.decode('latin1').encode('utf8', 'ignore')
-            return nstr.strip()
-        except BaseException:
-            i += 1
-            return resolve_unicode(string, i)
-    elif i == 2:
-        try:
-            nstr = string.encode('latin1', 'ignore')
-            return nstr.strip()
-        except BaseException:
-            i += 1
-            return resolve_unicode(string, i)
-    else:
-        raise
-    return nstr.strip()
 
 
 class ResPartner(models.Model):
@@ -69,6 +40,9 @@ class ResPartner(models.Model):
     SUNAT
     """
     _inherit = 'res.partner'
+    _sql_constraints = [
+        ('vat_unique','UNIQUE(vat)','The vat must que unique'),
+    ]
 
     @api.model
     def _get_info_from_file(self, result):
@@ -97,35 +71,38 @@ class ResPartner(models.Model):
             new = ('%(desc)s %(val)s' % {'desc': desc, 'val': val}).strip()
             street = '%(street)s %(new)s' % {'street': street, 'new': new}
             street = street.strip().replace('\\', '')
-        return name, street, ruc, ubigeo
+        return True, 'none', name, name, street, ruc, ubigeo
 
     @api.model
     def _download_ruc_from_sunat(self):
         _logger.info('Starting Download of the file')
-        r = requests.\
-            get('http://www2.sunat.gob.pe/padron_reducido_ruc.zip',
-                stream=True)
-        zfobj = zipfile.ZipFile(StringIO.StringIO(r.content))
+        URL = 'http://www2.sunat.gob.pe/padron_reducido_ruc.zip'
+        zip_file, __ = urllib.urlretrieve(URL)
+        zfobj = zipfile.ZipFile(zip_file)
+        _logger.info('File downloaded')
+        _logger.info('Reading file')
         lines = zfobj.read('padron_reducido_ruc.txt')
-        files = open('/tmp/partner_ruc.csv', 'wb')
-        for line in lines.split('\n')[1:]:
-            line = resolve_unicode(line).replace('"', '').replace('\\|', '')
-            name, street, ruc, ubigeo = self._get_info_from_file(line)
-            self._cr.execute('''SELECT
-                                    id
-                                FROM
+        _logger.info('Loading partners')
+        for register in lines.splitlines()[1:]:
+            reg = tuple(self._get_info_from_file(
+                register.decode('latin-1').encode('utf8')))
+            self._cr.execute('''INSERT INTO
                                     res_partner
-                                WHERE
-                                    vat = %s
-                                LIMIT 1''', (ruc,))
-            if not self._cr.fetchall():
-                files.write('%s|%s|%s|%s|true|none|%s\n' %
-                            (name, name, street, ruc, ubigeo))
-        files.close()
-        files = open('/tmp/partner_ruc.csv', 'rb')
-        _logger.info('Loading Partners')
-        self._cr.\
-            copy_expert("""COPY res_partner(display_name, name, street,
-                                            vat, active, notify_email, city)
-                        FROM STDIN WITH DELIMITER '|'""", files)
+                            (  active,
+                                notify_email,
+                                display_name,
+                                name,
+                                street,
+                                vat,
+                                city)
+                            VALUES %s
+                            ON CONFLICT
+                                (vat)
+                            DO UPDATE SET
+                                display_name = EXCLUDED.display_name,
+                                name = EXCLUDED.name,
+                                street = EXCLUDED.street,
+                                city = EXCLUDED.city;
+                            ''', (reg,))
+        _logger.info('Queries executed')
         _logger.info('Process Finished')

@@ -24,10 +24,11 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 #
-from openerp import models, api, fields
+import hashlib
 import logging
 from datetime import datetime
-import hashlib
+
+from openerp import api, fields, models
 
 _logger = logging.getLogger(__name__)
 
