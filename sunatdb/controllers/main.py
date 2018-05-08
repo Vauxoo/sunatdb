@@ -10,11 +10,10 @@ class SunatdbController(http.Controller):
 
     @http.route('/rfc', type='http', auth="public", methods=['GET'],
                 website=True)
-    def validate_email(self, token, user, rfc, **kwargs):
+    def validate_email(self, token, rfc, **kwargs):
 
         if request.env['res.users'].sudo().\
-                search([('login', '=', user),
-                        ('access_token', '=', token),
+                search([('access_token', '=', token),
                         ('authorized', '=', True)]):
             partner_data = request.env['res.partner'].sudo().\
                 search_read(domain=[('vat', '=', rfc)],

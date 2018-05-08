@@ -25,10 +25,13 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 #
+import base64
 import logging
-import urllib
 import zipfile
 from collections import OrderedDict
+from StringIO import StringIO
+
+import requests
 
 from openerp import api, models
 
@@ -41,7 +44,7 @@ class ResPartner(models.Model):
     """
     _inherit = 'res.partner'
     _sql_constraints = [
-        ('vat_unique','UNIQUE(vat)','The vat must que unique'),
+        ('vat_unique', 'UNIQUE(vat)', 'The vat must que unique'),
     ]
 
     @api.model
@@ -74,14 +77,40 @@ class ResPartner(models.Model):
         return True, 'none', name, name, street, ruc, ubigeo
 
     @api.model
-    def _download_ruc_from_sunat(self):
+    def _download_zip_from_sunat(self, url=False):
         _logger.info('Starting Download of the file')
-        URL = 'http://www2.sunat.gob.pe/padron_reducido_ruc.zip'
-        zip_file, __ = urllib.urlretrieve(URL)
-        zfobj = zipfile.ZipFile(zip_file)
-        _logger.info('File downloaded')
+        if not url:
+            url = 'http://www2.sunat.gob.pe/padron_reducido_ruc.zip'
+        request = requests.get(url)
+        encoded = base64.b64encode(request.content)
+        attachment = self.env['ir.attachment'].search(
+            [('mimetype', '=', 'application/zip'),
+             ('type', '=', 'binary'),
+             ('name', '=', 'padron_reducido_ruc'),
+             ('db_check_update', '=', False)], limit=1)
+        if not attachment:
+            self.env['ir.attachment'].create({
+                'datas': encoded,
+                'mimetype': 'application/zip',
+                'name': "padron_reducido_ruc",
+                'datas_fname': "padron_reducido_ruc.zip",
+            })
+            return
+        attachment.update({'datas': encoded})
+
+    @api.model
+    def _register_new_partners(self):
         _logger.info('Reading file')
-        lines = zfobj.read('padron_reducido_ruc.txt')
+        attachment = self.env['ir.attachment'].search(
+            [('mimetype', '=', 'application/zip'),
+             ('type', '=', 'binary'),
+             ('name', '=', 'padron_reducido_ruc'),
+             ('db_check_update', '=', False)], limit=1)
+        if not attachment:
+            return
+        encoded = base64.b64decode(attachment.datas)
+        zip_decoded = zipfile.ZipFile(StringIO(encoded))
+        lines = zip_decoded.read('padron_reducido_ruc.txt')
         _logger.info('Loading partners')
         for register in lines.splitlines()[1:]:
             reg = tuple(self._get_info_from_file(
