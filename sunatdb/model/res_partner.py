@@ -82,7 +82,9 @@ class ResPartner(models.Model):
         if not url:
             url = 'http://www2.sunat.gob.pe/padron_reducido_ruc.zip'
         request = requests.get(url)
+        _logger.info('Encoding fileload of the file')
         encoded = base64.b64encode(request.content)
+        _logger.info('File encoded')
         attachment = self.env['ir.attachment'].search(
             [('mimetype', '=', 'application/zip'),
              ('type', '=', 'binary'),
@@ -97,6 +99,7 @@ class ResPartner(models.Model):
             })
             return
         attachment.update({'datas': encoded})
+        _logger.info('File saved and stored')
 
     @api.model
     def _register_new_partners(self):
@@ -106,10 +109,17 @@ class ResPartner(models.Model):
              ('type', '=', 'binary'),
              ('name', '=', 'padron_reducido_ruc'),
              ('db_check_update', '=', False)], limit=1)
-        if not attachment:
+        if not attachment or not attachment.datas:
+            _logger.info('Attachment not found or no zip')
             return
+        _logger.info('Decoding file')
         encoded = base64.b64decode(attachment.datas)
-        zip_decoded = zipfile.ZipFile(StringIO(encoded))
+        _logger.info('File decoded')
+        try:
+            zip_decoded = zipfile.ZipFile(StringIO(encoded))
+        except zipfile.BadZipfile:
+            _logger.info('The zip you are trying to read is not a zipfile')
+        _logger.info('Zipfile created, reading .txt inside')
         lines = zip_decoded.read('padron_reducido_ruc.txt')
         _logger.info('Loading partners')
         for register in lines.splitlines()[1:]:
@@ -134,4 +144,7 @@ class ResPartner(models.Model):
                                 city = EXCLUDED.city;
                             ''', (reg,))
         _logger.info('Queries executed')
+        _logger.info('Disabling this attachment')
+        attachment.update({'db_check_update': True})
+        _logger.info('Attachment disabled')
         _logger.info('Process Finished')

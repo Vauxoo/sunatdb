@@ -11,4 +11,3 @@ class IrsAttachment(models.Model):
 
     db_check_update = fields.Boolean("SUNAT Padron check update",
                                      default=False, copy=False)
-    db_zip = fields.Binary(string="File to store the SUNAT RUC database")
