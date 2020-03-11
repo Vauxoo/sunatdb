@@ -1,39 +1,14 @@
-# -*- coding: utf-8 -*-
-##
-#    Module Writen to OpenERP, Open Source Management Solution
-#
-#    Copyright (c) 2014 Vauxoo - http://www.vauxoo.com
-#    All Rights Reserved.
-#    info@vauxoo.com
-##
-#    Coded by: Edgard Pimentel (pimentelrojas@gmail.com)
-#              Luis Torres (luis_t@vauxoo.com)
-#              Mariano Fernandez (mariano@vauxoo.com)
-##
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as
-#    published by the Free Software Foundation, either version 3 of the
-#    License, or (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-#
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
+
 import base64
 import logging
 import zipfile
 from collections import OrderedDict
-from StringIO import StringIO
+from io import BytesIO
 
 import requests
 
-from openerp import api, models
+from odoo import api, models
 
 _logger = logging.getLogger(__name__)
 
@@ -61,11 +36,11 @@ class ResPartner(models.Model):
         address['8'] = 8
         address['DEP.'] = 12
         address['INT.'] = 10
-        text = result.replace('|-|', '||')
+        text = result.decode('UTF-8').replace('|-|', '||')
         text = text.split('|')
-        name = len(text) >= 14 and text[1] or ''
-        ruc = len(text) >= 14 and text[0] or ''
-        ubigeo = len(text) >= 14 and text[4] or ''
+        name = (text[1] if len(text) >= 14 else '')
+        ruc = (text[0] if len(text) >= 14 else '')
+        ubigeo = (text[4] if len(text) >= 14 else '')
         for add in len(text) >= 14 and address or []:
             desc = text[address[add]].replace('-', '').strip() and \
                 (add in ('6', '8') and text[address[add] - 1] or add) or ''
@@ -74,7 +49,7 @@ class ResPartner(models.Model):
             new = ('%(desc)s %(val)s' % {'desc': desc, 'val': val}).strip()
             street = '%(street)s %(new)s' % {'street': street, 'new': new}
             street = street.strip().replace('\\', '')
-        return True, 'none', name, name, street, ruc, ubigeo
+        return True, name, name, street, ruc, ubigeo
 
     @api.model
     def _download_zip_from_sunat(self, url=False):
@@ -94,8 +69,7 @@ class ResPartner(models.Model):
             self.env['ir.attachment'].create({
                 'datas': encoded,
                 'mimetype': 'application/zip',
-                'name': "padron_reducido_ruc",
-                'datas_fname': "padron_reducido_ruc.zip",
+                'name': "padron_reducido_ruc.zip",
             })
             return
         attachment.update({'datas': encoded})
@@ -107,16 +81,15 @@ class ResPartner(models.Model):
         attachment = self.env['ir.attachment'].search(
             [('mimetype', '=', 'application/zip'),
              ('type', '=', 'binary'),
-             ('name', '=', 'padron_reducido_ruc'),
+             ('name', '=', 'padron_reducido_ruc.zip'),
              ('db_check_update', '=', False)], limit=1)
         if not attachment or not attachment.datas:
             _logger.info('Attachment not found or no zip')
             return
         _logger.info('Decoding file')
-        encoded = base64.b64decode(attachment.datas)
-        _logger.info('File decoded')
         try:
-            zip_decoded = zipfile.ZipFile(StringIO(encoded))
+            zip_decoded = zipfile.ZipFile(BytesIO(base64.b64decode(attachment.datas)))
+            _logger.info('File decoded')
         except zipfile.BadZipfile:
             _logger.info('The zip you are trying to read is not a zipfile')
         _logger.info('Zipfile created, reading .txt inside')
@@ -128,7 +101,6 @@ class ResPartner(models.Model):
             self._cr.execute('''INSERT INTO
                                     res_partner
                             (  active,
-                                notify_email,
                                 display_name,
                                 name,
                                 street,
